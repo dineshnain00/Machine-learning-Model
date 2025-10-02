@@ -1,0 +1,130 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
+import numpy as np
+import matplotlib.pyplot as plt
+
+# =======================
+# 1. Load Dataset
+# =======================
+df = pd.read_csv("dataset2.csv")
+
+# Target column (Objective)
+y = df["What are your savings objectives?"]
+X = df.drop(columns=["What are your savings objectives?"])
+
+# =======================
+# 2. Preprocessing
+# =======================
+# Separate categorical and numerical features
+cat_features = X.select_dtypes(include=["object"]).columns.tolist()
+num_features = X.select_dtypes(exclude=["object"]).columns.tolist()
+
+# Preprocessor: OneHotEncode categorical + scale numerics (for LR & SVM)
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore"), cat_features),
+        ("num", StandardScaler(), num_features)
+    ]
+)
+
+# =======================
+# 3. Define Models
+# =======================
+models = {
+    "Naive Bayes": GaussianNB(),
+    "Decision Tree": DecisionTreeClassifier(random_state=42),
+    "Random Forest": RandomForestClassifier(random_state=42, n_estimators=100),
+    "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+    "SVM": SVC(kernel="rbf", probability=True, random_state=42)
+}
+
+# =======================
+# 4. Train/Test Split
+# =======================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# =======================
+# 5. Evaluation on Holdout Test
+# =======================
+print("\n=== Holdout Test Results ===\n")
+holdout_results = {}
+
+for name, model in models.items():
+    clf = Pipeline(steps=[("preprocessor", preprocessor),
+                         ("classifier", model)])
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    
+    acc = accuracy_score(y_test, y_pred)
+    holdout_results[name] = acc
+    
+    print(f"Model: {name}")
+    print("Accuracy :", acc)
+    print("Precision:", precision_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("Recall   :", recall_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("F1 Score :", f1_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    print("-" * 50)
+
+    # === Save Confusion Matrix Plot ===
+    cm = confusion_matrix(y_test, y_pred, labels=clf.classes_)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=clf.classes_)
+    disp.plot(cmap="Blues", xticks_rotation=45)
+    plt.title(f"Confusion Matrix - {name}")
+    plt.tight_layout()
+    plt.savefig(f"confusion_matrix_{name.replace(' ', '_').lower()}.png", dpi=300)
+    plt.close()
+
+# =======================
+# 6. Cross-Validation
+# =======================
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv_results = {}
+
+print("\n=== 5-Fold Cross-Validation Results ===\n")
+for name, model in models.items():
+    clf = Pipeline(steps=[("preprocessor", preprocessor),
+                         ("classifier", model)])
+    scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+    cv_results[name] = np.mean(scores)
+    
+    print(f"Model: {name}")
+    print("CV Mean Accuracy:", np.mean(scores))
+    print("CV Std Dev      :", np.std(scores))
+    print("Fold Scores     :", scores)
+    print("-" * 50)
+
+# =======================
+# 7. Plot & Save Accuracy Comparison
+# =======================
+plt.figure(figsize=(10,5))
+
+# Holdout Test Accuracy
+plt.subplot(1,2,1)
+plt.barh(list(holdout_results.keys()), list(holdout_results.values()), color="skyblue")
+plt.title("Holdout Test Accuracy")
+plt.xlabel("Accuracy")
+
+# Cross-Validation Mean Accuracy
+plt.subplot(1,2,2)
+plt.barh(list(cv_results.keys()), list(cv_results.values()), color="lightgreen")
+plt.title("5-Fold CV Mean Accuracy")
+plt.xlabel("Accuracy")
+
+plt.tight_layout()
+plt.savefig("model_accuracy_comparison.png", dpi=300)  # Save plot as PNG
+plt.show()
+
+print("\n✅ Accuracy comparison saved as 'model_accuracy_comparison.png'")
+print("✅ Confusion matrices saved as 'confusion_matrix_<model>.png'")
