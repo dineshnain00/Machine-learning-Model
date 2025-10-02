@@ -1,0 +1,157 @@
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+
+# Data Collection
+df = pd.read_csv("dataset2.csv")  # to read the file
+print(df)
+
+## Data Preprocessing
+from sklearn.preprocessing import LabelEncoder
+le = LabelEncoder()
+
+df['gender'] = le.fit_transform(df['gender'])
+df['Equity_Market'] = le.fit_transform(df['Equity_Market'])
+df['Mutual_Funds'] = le.fit_transform(df['Mutual_Funds'])
+df['Fixed_Deposits'] = le.fit_transform(df['Fixed_Deposits'])
+df['Source'] = le.fit_transform(df['Source'])
+
+print(df)
+x = df.drop(columns=['Objective'])  # Input - X
+y = df['Objective']                # Output - Y
+
+print("XXXX", x)
+print("YYYY", y)
+
+
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=12)  # split the val
+
+##Train - 80% input data
+## y_train - 80% output data
+## X_test - 20% input data
+## Y_test - 20% output data
+
+print("DF", df.shape)
+print("x_train", x_train.shape)
+print("x_test", x_test.shape)
+print("y_train", y_train.shape)
+print("y_test", y_test.shape)
+
+from sklearn.naive_bayes import GaussianNB
+# Encode categorical columns
+le = LabelEncoder()
+
+for col in df.columns:
+    if df[col].dtype == 'object':   # if column is text
+        df[col] = le.fit_transform(df[col])
+
+# Now select features and target
+X = df.drop("Objective", axis=1)  # features
+y = df["Objective"]               # target (also categorical)
+
+# Encode target as well
+y = le.fit_transform(y)
+
+# Split and train
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+model = GaussianNB()
+model.fit(X_train, y_train)
+
+print("Accuracy:", model.score(X_test, y_test))
+
+# Model Prediction
+testPrediction = model.predict([[9,5,2,5,4,6,1,2,5,4,7,6,8,9,6,6,5,6,3,6,8,7,4]])
+if testPrediction == 1:
+    print("Awesome running")
+else:
+    print("Bad for wealth")
+
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import OneHotEncoder ,StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import numpy as np
+
+# =======================
+# 1. Load Dataset
+# =======================
+df = pd.read_csv("dataset2.csv")
+
+# Target column (Objective)
+y = df["What are your savings objectives?"]
+X = df.drop(columns=["What are your savings objectives?"])
+
+# =======================
+# 2. Preprocessing
+# =======================
+# Separate categorical and numerical features
+cat_features = X.select_dtypes(include=["object"]).columns.tolist()
+num_features = X.select_dtypes(exclude=["object"]).columns.tolist()
+
+# Transformer: OneHot for categorical+ scale  numerics (better for LR & SVM)
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore"), cat_features),
+        ("num",StandardScaler(), num_features)
+    ]
+)
+
+# =======================
+# 3. Define Models
+# =======================
+models = {
+    "Naive Bayes": GaussianNB(),
+    "Decision Tree": DecisionTreeClassifier(random_state=42),
+    "Random Forest": RandomForestClassifier(random_state=42, n_estimators=100),
+    "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+    "SVM": SVC(kernel="rbf", probability=True, random_state=42)
+
+}
+
+# =======================
+# 4. Train/Test Split
+# =======================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# =======================
+# 5. Evaluation on Holdout Test
+# =======================
+print("\n=== Holdout Test Results ===\n")
+for name, model in models.items():
+    clf = Pipeline(steps=[("preprocessor", preprocessor),
+                         ("classifier", model)])
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    
+    print(f"Model: {name}")
+    print("Accuracy :", accuracy_score(y_test, y_pred))
+    print("Precision:", precision_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("Recall   :", recall_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("F1 Score :", f1_score(y_test, y_pred, average="weighted", zero_division=0))
+    print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+    print("-" * 50)
+
+# =======================
+# 6. Cross-Validation
+# =======================
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+print("\n=== 5-Fold Cross-Validation Results ===\n")
+for name, model in models.items():
+    clf = Pipeline(steps=[("preprocessor", preprocessor),
+                         ("classifier", model)])
+    scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+    print(f"Model: {name}")
+    print("CV Mean Accuracy:", np.mean(scores))
+    print("CV Std Dev      :", np.std(scores))
+    print("Fold Scores     :", scores)
+    print("-" * 50)
